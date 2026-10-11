@@ -32,3 +32,28 @@ def has_won(bb: int) -> bool:
 def get_tactical_moves(state: np.ndarray) -> tuple:
     curr_bb = pieces_to_bitboard(state[0])
     opp_bb = pieces_to_bitboard(state[1])
+    occupied = state[0] + state[1]
+
+    winning_moves = []
+    blocking_moves = []
+    suicide_moves = []
+
+    for c in range(COLS):
+        if occupied[0, c] != 0:
+            continue
+        r = 5
+        while r >= 0 and occupied[r, c] != 0:
+            r -= 1
+        bit = c * 7 + (5 - r)
+
+        if has_won(curr_bb | (1 << bit)):
+            winning_moves.append(c)
+        if has_won(opp_bb | (1 << bit)):
+            blocking_moves.append(c)
+
+        if r > 0:
+            above_bit = c * 7 + (5 - (r - 1))
+            if has_won(opp_bb | (1 << above_bit)):
+                suicide_moves.append(c)
+
+    return winning_moves, blocking_moves, suicide_moves
