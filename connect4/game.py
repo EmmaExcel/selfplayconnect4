@@ -73,3 +73,47 @@ class Connect4Game:
     def mirror_state(self, state: np.ndarray) -> np.ndarray:
         mirrored = np.zeros_like(state)
         mirrored[0] = np.flip(state[0], axis=1)
+        mirrored[1] = np.flip(state[1], axis=1)
+        mirrored[2] = state[2].copy()
+        return mirrored
+
+    def mirror_policy(self, policy: np.ndarray) -> np.ndarray:
+        return np.flip(policy).copy()
+
+    def state_to_board(self, state: np.ndarray) -> list:
+        board = [[0] * self.COLS for _ in range(self.ROWS)]
+        is_player1 = state[2, 0, 0] == 0
+        for row in range(self.ROWS):
+            for col in range(self.COLS):
+                if is_player1:
+                    if state[0, row, col] == 1:
+                        board[row][col] = 1
+                    elif state[1, row, col] == 1:
+                        board[row][col] = 2
+                else:
+                    if state[0, row, col] == 1:
+                        board[row][col] = 2
+                    elif state[1, row, col] == 1:
+                        board[row][col] = 1
+        return board
+
+    def board_to_state(self, board: list, current_player: int) -> np.ndarray:
+        state = np.zeros((3, self.ROWS, self.COLS), dtype=np.float32)
+        for row in range(self.ROWS):
+            for col in range(self.COLS):
+                if board[row][col] == current_player:
+                    state[0, row, col] = 1.0
+                elif board[row][col] != 0:
+                    state[1, row, col] = 1.0
+        if current_player == 2:
+            state[2] = 1.0
+        return state
+
+    def display(self, state: np.ndarray):
+        board = self.state_to_board(state)
+        symbols = {0: ".", 1: "X", 2: "O"}
+        print()
+        for row in board:
+            print(" ".join(symbols[cell] for cell in row))
+        print(" ".join(str(i) for i in range(self.COLS)))
+        print()
