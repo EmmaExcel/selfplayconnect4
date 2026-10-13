@@ -48,3 +48,44 @@ class Connect4Network(nn.Module):
     def forward(self, x, legal_moves_mask=None):
         x = F.relu(self.bn_input(self.conv_input(x)))
 
+        for block in self.residual_blocks:
+            x = block(x)
+
+        policy = F.relu(self.policy_bn(self.policy_conv(x)))
+        policy = policy.view(policy.size(0), -1)
+        policy = self.policy_fc(policy)
+
+        if legal_moves_mask is not None:
+            policy = policy.masked_fill(legal_moves_mask == 0, -1e4)
+
+        policy = F.log_softmax(policy, dim=1)
+
+        value = F.relu(self.value_bn(self.value_conv(x)))
+        value = value.view(value.size(0), -1)
+        value = F.relu(self.value_fc1(value))
+        value = torch.tanh(self.value_fc2(value))
+
+        return policy, value
+
+    def predict(self, state: np.ndarray, legal_moves: np.ndarray = None) -> tuple:
+        device = next(self.parameters()).device
+        self.eval()
+
+        with torch.no_grad():
+            if state.ndim == 3:
+                state = state[np.newaxis]
+            if legal_moves is not None and legal_moves.ndim == 1:
+                legal_moves = legal_moves[np.newaxis]
+
+            state_tensor = torch.from_numpy(state).float().to(device)
+            mask_tensor = None
+            if legal_moves is not None:
+                mask_tensor = torch.from_numpy(legal_moves).float().to(device)
+
+            log_policy, value = self.forward(state_tensor, mask_tensor)
+            policy = torch.exp(log_policy)
+
+            return policy.cpu().numpy(), value.cpu().numpy()
+
+    def predict_batch(self, states: np.ndarray, legal_moves: np.ndarray = None) -> tuple:
+        return self.predict(states, legal_moves)
