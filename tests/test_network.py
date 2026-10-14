@@ -26,6 +26,30 @@ class TestConnect4Network(unittest.TestCase):
         self.assertAlmostEqual(float(np.sum(policy)), 1.0, places=5)
 
     def test_backward_pass(self):
+        x = torch.randn((2, 3, 6, 7), dtype=torch.float32)
+        target_policy = torch.tensor([
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+        ], dtype=torch.float32)
+        target_value = torch.tensor([[1.0], [-1.0]], dtype=torch.float32)
 
-if __name__ == '__main__':
+        log_policy, value = self.net(x)
+        loss_p = -torch.mean(torch.sum(target_policy * log_policy, dim=1))
+        loss_v = torch.mean((value - target_value) ** 2)
+        loss = loss_p + loss_v
+        loss.backward()
+
+        for param in self.net.parameters():
+            if param.requires_grad:
+                self.assertIsNotNone(param.grad)
+
+    def test_predict_methods(self):
+        state = np.zeros((3, 6, 7), dtype=np.float32)
+        p, v = self.net.predict(state)
+        self.assertEqual(p.shape, (1, 7))
+        self.assertEqual(v.shape, (1, 1))
+        self.assertAlmostEqual(float(np.sum(p)), 1.0, places=5)
+
+
+if __name__ == "__main__":
     unittest.main()
