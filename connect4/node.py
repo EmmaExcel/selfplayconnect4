@@ -14,3 +14,13 @@ class MCTSNode:
         self.terminal_value = None
         self.is_expanded = False
 
+    @property
+    def q_value(self) -> float:
+        if self.visit_count == 0:
+            return 0.0
+        return self.value_sum / self.visit_count
+
+    def ucb_score(self, sqrt_parent_visits: float, c_puct: float) -> float:
+        q = -self.q_value
+        u = c_puct * self.prior * sqrt_parent_visits / (1 + self.visit_count)
+        return q + u
