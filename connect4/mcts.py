@@ -93,3 +93,72 @@ class MCTS:
         return best_child
 
     def _backup(self, node: MCTSNode, value: float):
+        current = node
+        while current is not None:
+            current.visit_count += 1
+            current.value_sum += value
+            value = -value
+            current = current.parent
+
+    def _add_dirichlet_noise(self, node: MCTSNode):
+        if not node.children:
+            return
+
+        actions = list(node.children.keys())
+        noise = np.random.dirichlet([self.dirichlet_alpha] * len(actions))
+
+        for i, action in enumerate(actions):
+            child = node.children[action]
+            child.prior = ((1 - self.dirichlet_epsilon) * child.prior
+                           + self.dirichlet_epsilon * noise[i])
+
+    def get_action(self, state: np.ndarray, temperature: float = 0.0,
+                   add_noise: bool = False) -> tuple:
+        winning_moves, blocking_moves, suicide_moves = self.game.get_tactical_moves(state)
+
+        if winning_moves:
+            action = winning_moves[0]
+            policy = np.zeros(self.game.COLS, dtype=np.float32)
+            policy[action] = 1.0
+            return action, policy
+
+        if len(blocking_moves) == 1 and not add_noise:
+            action = blocking_moves[0]
+            policy = np.zeros(self.game.COLS, dtype=np.float32)
+            policy[action] = 1.0
+            return action, policy
+
+        visit_counts = self.search(state, add_noise=add_noise)
+
+        if blocking_moves and not add_noise:
+            for c in range(self.game.COLS):
+                if c not in blocking_moves:
+                    visit_counts[c] = 0.0
+
+        if suicide_moves and not add_noise:
+            legal = self.game.get_legal_moves(state)
+            safe_legal = [c for c in range(self.game.COLS) if legal[c] == 1 and c not in suicide_moves]
+            if safe_legal:
+                for c in suicide_moves:
+                    visit_counts[c] = 0.0
+
+        if temperature < 1e-8:
+            action = int(np.argmax(visit_counts))
+        else:
+            counts = visit_counts ** (1.0 / temperature)
+            total = np.sum(counts)
+            if total == 0:
+                legal = self.game.get_legal_moves(state)
+                probs = legal / np.sum(legal)
+                action = int(np.random.choice(len(probs), p=probs))
+            else:
+                probs = counts / total
+                action = int(np.random.choice(len(probs), p=probs))
+
+        total_visits = np.sum(visit_counts)
+        if total_visits > 0:
+            policy = visit_counts / total_visits
+        else:
+            policy = np.zeros(self.game.COLS, dtype=np.float32)
+
+        return action, policy
