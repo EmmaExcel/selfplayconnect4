@@ -22,3 +22,18 @@ class OpponentPool:
     def latest(self) -> dict | None:
         checkpoints = self._list_checkpoints()
         if not checkpoints:
+            return None
+        checkpoints.sort()
+        return torch.load(checkpoints[-1], map_location="cpu", weights_only=True)
+
+    def size(self) -> int:
+        return len(self._list_checkpoints())
+
+    def _list_checkpoints(self) -> list:
+        if not os.path.exists(self.pool_dir):
+            return []
+        return [
+            os.path.join(self.pool_dir, f)
+            for f in os.listdir(self.pool_dir)
+            if f.endswith(".pt")
+        ]
