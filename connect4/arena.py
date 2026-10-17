@@ -33,3 +33,27 @@ class Arena:
             else:
                 p2_wins += 1
 
+        return p1_wins, p2_wins, draws
+
+    def _play_single_game(self, first_fn, second_fn) -> int:
+        state = self.game.get_initial_state()
+        current_fn = first_fn
+        move_count = 0
+
+        while True:
+            is_terminal, value = self.game.check_terminal(state)
+            if is_terminal:
+                if value == 0:
+                    return 0
+                if move_count % 2 == 0:
+                    return int(value)
+                return int(-value)
+
+            action = current_fn(state)
+            state = self.game.apply_move(state, action)
+            move_count += 1
+
+            if current_fn is first_fn:
+                current_fn = second_fn
+            else:
+                current_fn = first_fn
