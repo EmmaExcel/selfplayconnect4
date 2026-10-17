@@ -103,3 +103,76 @@ class Trainer:
         total_loss_sum = 0.0
         policy_loss_sum = 0.0
         value_loss_sum = 0.0
+        num_batches = 0
+
+        for _ in range(train_cfg['epochs_per_iteration']):
+            states, target_policies, target_values = self.replay_buffer.sample(train_cfg['batch_size'])
+
+            states_t = torch.from_numpy(states).float().to(self.device)
+            target_policies_t = torch.from_numpy(target_policies).float().to(self.device)
+            target_values_t = torch.from_numpy(target_values).float().to(self.device).unsqueeze(1)
+
+            legal_moves_mask = (states_t[:, 0, :, :] + states_t[:, 1, :, :])[:, 0, :]
+            legal_moves_mask = (legal_moves_mask == 0).float()
+
+            log_policy, value = self.network(states_t, legal_moves_mask)
+            loss, policy_loss, value_loss = self.loss_fn(
+                log_policy, value, target_policies_t, target_values_t
+            )
+
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+            self.scheduler.step()
+
+            total_loss_sum += loss.item()
+            policy_loss_sum += policy_loss.item()
+            value_loss_sum += value_loss.item()
+            num_batches += 1
+
+        avg_total = total_loss_sum / max(num_batches, 1)
+        avg_policy = policy_loss_sum / max(num_batches, 1)
+        avg_value = value_loss_sum / max(num_batches, 1)
+        return avg_total, avg_policy, avg_value
+
+    def _evaluate(self) -> bool:
+        eval_mcts_cfg = {
+            **self.config['mcts'],
+            'num_simulations': min(self.config['mcts'].get('num_simulations', 800), 200)
+        }
+
+        new_mcts = MCTS(self.game, self.network, eval_mcts_cfg)
+        best_mcts = MCTS(self.game, self.best_network, eval_mcts_cfg)
+
+        def new_player(state):
+            action, _ = new_mcts.get_action(state, temperature=0.0, add_noise=False)
+            return action
+
+        def best_player(state):
+            action, _ = best_mcts.get_action(state, temperature=0.0, add_noise=False)
+            return action
+
+        arena = Arena(self.game, new_player, best_player, self.config['arena']['num_games'])
+        new_wins, best_wins, draws = arena.play_games()
+
+        total_decisive = new_wins + best_wins
+        win_rate = 0.5 if total_decisive == 0 else (new_wins / total_decisive)
+
+        print(f"  Arena results: new={new_wins}, best={best_wins}, draws={draws} (win rate: {win_rate:.2%})")
+
+        threshold = self.config['training']['acceptance_threshold']
+        if win_rate >= threshold:
+            self.best_network.load_state_dict(self.network.state_dict())
+            return True
+
+        self.network.load_state_dict(self.best_network.state_dict())
+        return False
+
+    def _save_checkpoint(self, iteration: int):
+        path = os.path.join("checkpoints", "best_model.pt")
+        torch.save({
+            'iteration': iteration,
+            'model_state_dict': self.best_network.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict(),
+        }, path)
