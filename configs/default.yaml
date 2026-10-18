@@ -1,0 +1,35 @@
+game:
+  rows: 6
+  cols: 7
+
+network:
+  num_residual_blocks: 5
+  num_channels: 128
+
+training:
+  num_iterations: 100
+  games_per_iteration: 100
+  num_simulations: 800
+  batch_size: 256
+  epochs_per_iteration: 10
+  learning_rate: 0.001
+  lr_scheduler: cosine
+  weight_decay: 0.0001
+  replay_buffer_size: 500000
+  acceptance_threshold: 0.55
+
+mcts:
+  num_simulations: 800
+  c_puct: 1.25
+  dirichlet_alpha: 0.3
+  dirichlet_epsilon: 0.25
+  temperature_threshold_move: 15
+  temperature_high: 1.0
+  temperature_low: 0.1
+
+opponent_pool:
+  save_interval: 5
+  pool_game_fraction: 0.2
+
+arena:
+  num_games: 40
