@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connect 4 - AlphaZero Reinforcement Learning</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top-header">
+    <div class="header-container">
+      <div class="brand-group">
+        <span class="brand-title">Connect 4 AlphaZero</span>
+        <span class="brand-subtitle">Monte Carlo Tree Search</span>
+      </div>
+      <nav class="nav-links">
+        <a href="/" class="active">Game</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main-layout">
+    <div class="game-column">
+      <div class="status-panel">
+        <div class="turn-indicator">
+          <span class="disc-preview" id="currentTurnDisc"></span>
+          <span id="statusMessage">Your turn. Click any column to drop a piece.</span>
+        </div>
+        <div class="game-timer" id="moveCounter">Move: 0</div>
+      </div>
+
+      <div class="board-wrapper">
+        <div class="column-indicators" id="columnIndicators">
+          <div class="col-indicator" data-col="0"></div>
+          <div class="col-indicator" data-col="1"></div>
+          <div class="col-indicator" data-col="2"></div>
+          <div class="col-indicator" data-col="3"></div>
+          <div class="col-indicator" data-col="4"></div>
+          <div class="col-indicator" data-col="5"></div>
+          <div class="col-indicator" data-col="6"></div>
+        </div>
+        <div class="board-frame" id="boardFrame">
+          <div class="board-grid" id="boardGrid"></div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="sidebar-column">
+      <section class="panel-section">
+        <h2>Game Configuration</h2>
+        <div class="form-group">
+          <label for="difficultySelect">Search Simulations</label>
+          <select id="difficultySelect" class="form-control">
+            <option value="50">Fast (50 simulations)</option>
+            <option value="200" selected>Balanced (200 simulations)</option>
+            <option value="600">Deep Search (600 simulations)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Player Assignment</label>
+          <div class="segmented-control" id="playerSideControl">
+            <button type="button" class="segment-btn active" data-side="1">Play Red (First)</button>
+            <button type="button" class="segment-btn" data-side="2">Play Yellow (Second)</button>
+          </div>
+        </div>
+
+        <button type="button" id="newGameBtn" class="btn btn-primary">Start New Game</button>
+      </section>
+
+      <section class="panel-section">
+        <h2>Agent Evaluation</h2>
+        <div class="model-meta-row">
+          <div class="meta-item">
+            <span class="meta-label">Model Generation</span>
+            <span class="meta-val" id="modelGenDisplay">1</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Online Games Learned</span>
+            <span class="meta-val" id="gamesLearnedDisplay">0</span>
+          </div>
+        </div>
+
+        <div class="metric-block">
+          <div class="metric-header">
+            <span>Position Value</span>
+            <span id="valueDisplay">0.00</span>
+          </div>
+          <div class="eval-bar-track">
+            <div class="eval-bar-fill" id="evalBarFill"></div>
+          </div>
+          <div class="eval-scale">
+            <span>-1.0 (Human Win)</span>
+            <span>0.0 (Equal)</span>
+            <span>+1.0 (AI Win)</span>
+          </div>
+        </div>
+
+        <div class="metric-block">
+          <div class="metric-header">
+            <span>MCTS Policy Prior by Column</span>
+          </div>
+          <div class="policy-bars" id="policyBarsContainer">
+            <div class="policy-bar-row">
+              <span class="policy-col-num">0</span>
+              <div class="policy-bar-track"><div class="policy-bar-fill" id="policyBar0"></div></div>
+              <span class="policy-pct" id="policyPct0">0%</span>
+            </div>
+            <div class="policy-bar-row">
+              <span class="policy-col-num">1</span>
+              <div class="policy-bar-track"><div class="policy-bar-fill" id="policyBar1"></div></div>
+              <span class="policy-pct" id="policyPct1">0%</span>
+            </div>
+            <div class="policy-bar-row">
+              <span class="policy-col-num">2</span>
+              <div class="policy-bar-track"><div class="policy-bar-fill" id="policyBar2"></div></div>
+              <span class="policy-pct" id="policyPct2">0%</span>
+            </div>
+            <div class="policy-bar-row">
+              <span class="policy-col-num">3</span>
+              <div class="policy-bar-track"><div class="policy-bar-fill" id="policyBar3"></div></div>
+              <span class="policy-pct" id="policyPct3">0%</span>
+            </div>
+            <div class="policy-bar-row">
+              <span class="policy-col-num">4</span>
+              <div class="policy-bar-track"><div class="policy-bar-fill" id="policyBar4"></div></div>
+              <span class="policy-pct" id="policyPct4">0%</span>
+            </div>
+            <div class="policy-bar-row">
+              <span class="policy-col-num">5</span>
+              <div class="policy-bar-track"><div class="policy-bar-fill" id="policyBar5"></div></div>
+              <span class="policy-pct" id="policyPct5">0%</span>
+            </div>
+            <div class="policy-bar-row">
+              <span class="policy-col-num">6</span>
+              <div class="policy-bar-track"><div class="policy-bar-fill" id="policyBar6"></div></div>
+              <span class="policy-pct" id="policyPct6">0%</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-section">
+        <h2>Move History</h2>
+        <div class="move-log" id="moveLog">
+          <div class="move-log-empty">No moves played yet.</div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="app-footer">
+    <div class="footer-container">
+      <div class="footer-meta">
+        <span>Connect 4 Reinforcement Learning</span>
+        <span class="separator">|</span>
+        <span>ResNet Dual Head + MCTS</span>
+      </div>
+      <div class="footer-links">
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms and Conditions</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
