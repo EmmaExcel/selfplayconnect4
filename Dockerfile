@@ -16,10 +16,10 @@ COPY connect4/ connect4/
 COPY web/ web/
 COPY configs/ configs/
 COPY scripts/ scripts/
+COPY checkpoints/best_model.pt checkpoints/best_model.pt
 COPY README.md pyproject.toml .
 
-RUN mkdir -p checkpoints/pool data && \
-    python3 scripts/train_fast.py
+RUN mkdir -p checkpoints/pool data
 
 EXPOSE 8000
 

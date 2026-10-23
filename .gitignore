@@ -5,9 +5,9 @@ __pycache__/
 dist/
 build/
 .eggs/
-checkpoints/
+checkpoints/pool/
+checkpoints/exported_model.pt
 data/
-*.pt
 *.pth
 .env
 .venv/
