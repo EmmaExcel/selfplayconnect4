@@ -155,7 +155,7 @@ async function triggerAIMove() {
   statusMessage.textContent = "AI Agent is calculating move with MCTS...";
   updateStatusDisplay();
 
-  const simulations = parseInt(difficultySelect.value, 10) || 200;
+  const simulations = parseInt(difficultySelect.value, 10) || 150;
 
   try {
     const data = await fetchMove(board, currentTurn, simulations, currentSessionId);

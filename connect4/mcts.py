@@ -13,14 +13,14 @@ class MCTS:
         self.dirichlet_alpha = config.get('dirichlet_alpha', 0.3)
         self.dirichlet_epsilon = config.get('dirichlet_epsilon', 0.25)
 
-    def search(self, state: np.ndarray, add_noise: bool = True) -> np.ndarray:
+    def search(self, state: np.ndarray, add_noise: bool = True, early_stop: bool = False) -> np.ndarray:
         root = MCTSNode(state)
         self._expand(root)
 
         if add_noise:
             self._add_dirichlet_noise(root)
 
-        for _ in range(self.num_simulations):
+        for sim in range(self.num_simulations):
             node = root
 
             while node.is_expanded and not node.is_terminal:
@@ -29,13 +29,17 @@ class MCTS:
             if node.is_terminal:
                 value = node.terminal_value
             else:
-                self._expand(node)
-                if node.is_terminal:
-                    value = node.terminal_value
-                else:
-                    value = self._evaluate(node)
+                value = self._expand(node)
 
             self._backup(node, value)
+
+            if early_stop and sim >= 25 and sim % 4 == 0:
+                counts = [child.visit_count for child in root.children.values()]
+                if len(counts) > 1:
+                    counts.sort(reverse=True)
+                    remaining = self.num_simulations - sim - 1
+                    if counts[0] > counts[1] + remaining:
+                        break
 
         visit_counts = np.zeros(self.game.COLS, dtype=np.float32)
         for action, child in root.children.items():
@@ -43,16 +47,16 @@ class MCTS:
 
         return visit_counts
 
-    def _expand(self, node: MCTSNode):
+    def _expand(self, node: MCTSNode) -> float:
         is_terminal, terminal_value = self.game.check_terminal(node.state)
         if is_terminal:
             node.is_terminal = True
             node.terminal_value = terminal_value
             node.is_expanded = True
-            return
+            return terminal_value
 
         legal_moves = self.game.get_legal_moves(node.state)
-        policy, _ = self.network.predict(node.state, legal_moves)
+        policy, value = self.network.predict(node.state, legal_moves)
         policy = policy.flatten()
 
         policy = policy * legal_moves
@@ -74,6 +78,7 @@ class MCTS:
                 node.children[col] = child
 
         node.is_expanded = True
+        return float(value.flatten()[0])
 
     def _evaluate(self, node: MCTSNode) -> float:
         _, value = self.network.predict(node.state)
@@ -128,7 +133,15 @@ class MCTS:
             policy[action] = 1.0
             return action, policy
 
-        visit_counts = self.search(state, add_noise=add_noise)
+        legal = self.game.get_legal_moves(state)
+        valid_cols = [c for c in range(self.game.COLS) if legal[c] == 1]
+        if len(valid_cols) == 1:
+            action = valid_cols[0]
+            policy = np.zeros(self.game.COLS, dtype=np.float32)
+            policy[action] = 1.0
+            return action, policy
+
+        visit_counts = self.search(state, add_noise=add_noise, early_stop=(temperature < 1e-8 and not add_noise))
 
         if blocking_moves and not add_noise:
             for c in range(self.game.COLS):

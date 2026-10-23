@@ -33,6 +33,7 @@ class ModelInference:
             else:
                 self.network.load_state_dict(checkpoint)
         self.network.eval()
+        self.network.clear_cache()
 
     def get_move(self, board: list, current_player: int, simulations: int = 200) -> dict:
         if os.path.exists(self.checkpoint_path):

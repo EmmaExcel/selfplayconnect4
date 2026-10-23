@@ -44,6 +44,11 @@ class Connect4Network(nn.Module):
         self.value_bn = nn.BatchNorm2d(1)
         self.value_fc1 = nn.Linear(1 * rows * cols, 256)
         self.value_fc2 = nn.Linear(256, 1)
+        self._device = None
+        self._eval_cache = {}
+
+    def clear_cache(self):
+        self._eval_cache.clear()
 
     def forward(self, x, legal_moves_mask=None):
         x = F.relu(self.bn_input(self.conv_input(x)))
@@ -68,24 +73,35 @@ class Connect4Network(nn.Module):
         return policy, value
 
     def predict(self, state: np.ndarray, legal_moves: np.ndarray = None) -> tuple:
-        device = next(self.parameters()).device
-        self.eval()
+        if state.ndim == 3 and not self.training:
+            cache_key = state.tobytes()
+            if cache_key in self._eval_cache:
+                return self._eval_cache[cache_key]
 
-        with torch.no_grad():
+        if self._device is None:
+            self._device = next(self.parameters()).device
+
+        with torch.inference_mode():
             if state.ndim == 3:
-                state = state[np.newaxis]
-            if legal_moves is not None and legal_moves.ndim == 1:
-                legal_moves = legal_moves[np.newaxis]
+                state_tensor = torch.from_numpy(state).unsqueeze(0).to(self._device)
+            else:
+                state_tensor = torch.from_numpy(state).to(self._device)
 
-            state_tensor = torch.from_numpy(state).float().to(device)
             mask_tensor = None
             if legal_moves is not None:
-                mask_tensor = torch.from_numpy(legal_moves).float().to(device)
+                if legal_moves.ndim == 1:
+                    mask_tensor = torch.from_numpy(legal_moves).unsqueeze(0).to(self._device)
+                else:
+                    mask_tensor = torch.from_numpy(legal_moves).to(self._device)
 
             log_policy, value = self.forward(state_tensor, mask_tensor)
             policy = torch.exp(log_policy)
+            result = (policy.cpu().numpy(), value.cpu().numpy())
 
-            return policy.cpu().numpy(), value.cpu().numpy()
+            if state.ndim == 3 and not self.training:
+                self._eval_cache[state.tobytes()] = result
+
+            return result
 
     def predict_batch(self, states: np.ndarray, legal_moves: np.ndarray = None) -> tuple:
         return self.predict(states, legal_moves)

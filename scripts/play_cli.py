@@ -15,7 +15,7 @@ def main():
     parser = argparse.ArgumentParser(description="Play Connect 4 against trained agent in terminal")
     parser.add_argument("--checkpoint", type=str, default="checkpoints/best_model.pt")
     parser.add_argument("--config", type=str, default="configs/default.yaml")
-    parser.add_argument("--simulations", type=int, default=400)
+    parser.add_argument("--simulations", type=int, default=150)
     parser.add_argument("--human-first", action="store_true")
     args = parser.parse_args()
 
