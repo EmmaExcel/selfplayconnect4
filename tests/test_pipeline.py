@@ -1,6 +1,7 @@
 import unittest
 import shutil
 import tempfile
+import time
 import numpy as np
 from connect4.game import Connect4Game
 from connect4.network import Connect4Network
@@ -89,6 +90,29 @@ class TestPipeline(unittest.TestCase):
         stats = learner.complete_game("sess_test", winner=1, moves=moves)
         self.assertEqual(stats["games_learned"], 1)
         self.assertGreater(len(learner.buffer), 0)
+        self.assertEqual(learner.complete_game("sess_test", winner=1, moves=moves)["games_learned"], 1)
+        reloaded = OnlineLearner(model_path=model_file, data_path=data_file)
+        self.assertEqual(reloaded.get_stats()["games_learned"], 1)
+        self.assertEqual(len(reloaded.buffer), len(learner.buffer))
+        with self.assertRaises(ValueError):
+            reloaded.complete_game("bad", winner=2, moves=moves)
+        self.assertEqual(reloaded.get_stats()["games_learned"], 1)
+
+    def test_online_training_saves_generation(self):
+        from web.online_learner import OnlineLearner
+        import os
+        model_file = os.path.join(self.temp_dir, "trained_model.pt")
+        data_file = os.path.join(self.temp_dir, "trained_buffer.pt")
+        learner = OnlineLearner(model_path=model_file, data_path=data_file)
+        learner.complete_game("finished", winner=2, moves=[3, 2, 3, 2, 4, 2, 4, 2])
+        deadline = time.monotonic() + 30
+        while learner.get_stats()["training"] and time.monotonic() < deadline:
+            time.sleep(0.05)
+        stats = learner.get_stats()
+        self.assertIsNone(stats["training_error"])
+        self.assertEqual(stats["model_generation"], 1)
+        self.assertTrue(os.path.exists(model_file))
+        self.assertEqual(OnlineLearner(model_file, data_file).get_stats()["model_generation"], 1)
 
 
 if __name__ == "__main__":

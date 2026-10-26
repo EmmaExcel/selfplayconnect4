@@ -1,0 +1,12 @@
+services:
+  connect4:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      CONNECT4_DATA_DIR: /app/persist
+    volumes:
+      - connect4-data:/app/persist
+
+volumes:
+  connect4-data:

@@ -164,8 +164,13 @@ Open `http://localhost:8000` in any browser:
 - Main Game: `http://localhost:8000/`
 - Privacy Policy: `http://localhost:8000/privacy`
 - Terms and Conditions: `http://localhost:8000/terms`
+- Play Online: https://connect4.excelemma.site/
 
-The web application shows live position value evaluations, MCTS prior probabilities per column, move history, and dynamic model generation statistics.
+The web application offers Hard, Very Hard, and Extremely Hard tactical search, and shows live position value evaluations, AI move preferences by column, move history, and online training statistics.
+
+For a hosted instance, set `CONNECT4_DATA_DIR` to a directory backed by a persistent volume (for example `/app/persist`). The server seeds its first model from the bundled checkpoint, then stores online training samples, game counts, and updated weights in that directory. Without a persistent volume, those online updates are lost when the container is replaced. The displayed **Completed Games Saved** count includes validated finished games; **Online Model Updates** increases only after a trained checkpoint is saved. Training state refreshes while the page is open.
+
+For Docker Compose, `docker compose up --build` uses the included named volume so training survives container replacements.
 
 ## License
 

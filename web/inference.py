@@ -1,10 +1,12 @@
 import os
+import threading
 import torch
 import yaml
 import numpy as np
 from connect4.game import Connect4Game
 from connect4.network import Connect4Network
 from connect4.mcts import MCTS
+from connect4.tactical_search import choose_move
 
 
 class ModelInference:
@@ -20,22 +22,28 @@ class ModelInference:
         )
 
         self.checkpoint_path = checkpoint_path
+        self.lock = threading.RLock()
         self.last_mtime = 0.0
         self.reload_weights(checkpoint_path)
 
     def reload_weights(self, checkpoint_path: str = None):
-        path = checkpoint_path or self.checkpoint_path
-        if os.path.exists(path):
-            self.last_mtime = os.path.getmtime(path)
-            checkpoint = torch.load(path, map_location="cpu")
-            if "model_state_dict" in checkpoint:
-                self.network.load_state_dict(checkpoint["model_state_dict"])
-            else:
-                self.network.load_state_dict(checkpoint)
-        self.network.eval()
-        self.network.clear_cache()
+        with self.lock:
+            path = checkpoint_path or self.checkpoint_path
+            if os.path.exists(path):
+                checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+                if "model_state_dict" in checkpoint:
+                    self.network.load_state_dict(checkpoint["model_state_dict"])
+                else:
+                    self.network.load_state_dict(checkpoint)
+                self.last_mtime = os.path.getmtime(path)
+            self.network.eval()
+            self.network.clear_cache()
 
     def get_move(self, board: list, current_player: int, simulations: int = 200) -> dict:
+        with self.lock:
+            return self._get_move(board, current_player, simulations)
+
+    def _get_move(self, board: list, current_player: int, simulations: int) -> dict:
         if os.path.exists(self.checkpoint_path):
             current_mtime = os.path.getmtime(self.checkpoint_path)
             if current_mtime > self.last_mtime:
@@ -46,8 +54,14 @@ class ModelInference:
             "num_simulations": max(10, simulations),
             "c_puct": self.config["mcts"]["c_puct"]
         }
-        mcts = MCTS(self.game, self.network, mcts_cfg)
-        action, policy = mcts.get_action(state, temperature=0.0, add_noise=False)
+        if simulations >= 400:
+            depth = 10 if simulations >= 1600 else 8 if simulations >= 800 else 6
+            action = choose_move(board, current_player, depth=depth)
+            policy = np.zeros(self.game.COLS, dtype=np.float32)
+            policy[action] = 1.0
+        else:
+            mcts = MCTS(self.game, self.network, mcts_cfg)
+            action, policy = mcts.get_action(state, temperature=0.0, add_noise=False)
         _, value_arr = self.network.predict(state)
         value = float(value_arr[0, 0])
 

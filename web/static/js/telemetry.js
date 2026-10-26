@@ -35,6 +35,14 @@ export function updateModelStats(modelGenDisplay, gamesLearnedDisplay, stats) {
   if (gamesLearnedDisplay && stats.games_learned !== undefined) {
     gamesLearnedDisplay.textContent = stats.games_learned;
   }
+  const trainingState = document.getElementById("trainingState");
+  if (trainingState) {
+    trainingState.textContent = stats.training_error
+      ? `Training error: ${stats.training_error}`
+      : stats.training ? "Learning from completed games…"
+      : stats.pending_games ? "Game saved; waiting for enough positions to train…"
+      : "Training is up to date";
+  }
 }
 
 export function renderMoveHistory(moveLog, moveHistory, humanSide) {

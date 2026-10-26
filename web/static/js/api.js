@@ -1,12 +1,11 @@
-export async function fetchMove(board, player, simulations, sessionId) {
+export async function fetchMove(board, player, simulations) {
   const response = await fetch("/api/move", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       board: board,
       player: player,
-      simulations: simulations,
-      session_id: sessionId
+      simulations: simulations
     })
   });
   if (!response.ok) {

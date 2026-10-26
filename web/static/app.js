@@ -10,6 +10,7 @@ let isThinking = false;
 let moveCount = 0;
 let moveHistory = [];
 let currentSessionId = "";
+let gameEpoch = 0;
 
 const boardGrid = document.getElementById("boardGrid");
 const columnIndicators = document.querySelectorAll(".col-indicator");
@@ -24,6 +25,11 @@ const evalBarFill = document.getElementById("evalBarFill");
 const moveLog = document.getElementById("moveLog");
 const modelGenDisplay = document.getElementById("modelGenDisplay");
 const gamesLearnedDisplay = document.getElementById("gamesLearnedDisplay");
+const resultOverlay = document.getElementById("resultOverlay");
+const resultTitle = document.getElementById("resultTitle");
+const resultDescription = document.getElementById("resultDescription");
+const resultIcon = document.getElementById("resultIcon");
+const playAgainBtn = document.getElementById("playAgainBtn");
 
 function generateSessionId() {
   return "sess_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 7);
@@ -37,6 +43,8 @@ async function loadStats() {
 }
 
 function initBoard() {
+  gameEpoch++;
+  resultOverlay.hidden = true;
   board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
   isGameOver = false;
   isThinking = false;
@@ -110,11 +118,12 @@ function makeMove(col, player) {
 
   board[row][col] = player;
   moveCount++;
+  moveCounter.textContent = `Move: ${moveCount}`;
 
   const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
   if (cell) {
     const disc = cell.querySelector(".cell-disc");
-    disc.className = `cell-disc ${player === 1 ? "red" : "yellow"}`;
+    disc.className = `cell-disc dropping ${player === 1 ? "red" : "yellow"}`;
   }
 
   moveHistory.push({ moveNum: moveCount, player, col, row });
@@ -124,15 +133,17 @@ function makeMove(col, player) {
   if (winCells) {
     isGameOver = true;
     highlightWin(winCells);
-    const winnerName = player === humanSide ? "Human" : "AI Agent";
-    statusMessage.textContent = `Game Over. ${winnerName} won the match. Model updating...`;
+    const humanWon = player === humanSide;
+    statusMessage.textContent = humanWon ? "You won!" : "AI won this round.";
+    showResult(humanWon ? "You won!" : "AI wins!", humanWon ? "Excellent play. Ready for another round?" : "The AI found four in a row. Try again!", humanWon ? "★" : "✦");
     handleGameOver(player);
     return;
   }
 
   if (checkDraw(board)) {
     isGameOver = true;
-    statusMessage.textContent = "Game Over. Match ended in a draw. Model updating...";
+    statusMessage.textContent = "It's a draw!";
+    showResult("It's a draw!", "Neither side connected four. Play again?", "=");
     handleGameOver(0);
     return;
   }
@@ -146,10 +157,21 @@ async function handleGameOver(winner) {
     const cols = moveHistory.map(m => m.col);
     const stats = await reportGameOver(currentSessionId, winner, cols);
     updateModelStats(modelGenDisplay, gamesLearnedDisplay, stats);
-  } catch (err) {}
+  } catch (err) {
+    statusMessage.textContent += " Game could not be saved for training.";
+  }
+}
+
+function showResult(title, description, icon) {
+  resultTitle.textContent = title;
+  resultDescription.textContent = description;
+  resultIcon.textContent = icon;
+  resultOverlay.hidden = false;
+  playAgainBtn.focus();
 }
 
 async function triggerAIMove() {
+  const epoch = gameEpoch;
   isThinking = true;
   clearColumnHighlights();
   statusMessage.textContent = "AI Agent is calculating move with MCTS...";
@@ -158,13 +180,16 @@ async function triggerAIMove() {
   const simulations = parseInt(difficultySelect.value, 10) || 150;
 
   try {
-    const data = await fetchMove(board, currentTurn, simulations, currentSessionId);
+    const data = await fetchMove(board, currentTurn, simulations);
+    if (epoch !== gameEpoch) return;
     updateEvaluation(valueDisplay, evalBarFill, data.value);
     updatePolicyBars(data.policy);
     makeMove(data.column, currentTurn);
   } catch (err) {
+    if (epoch !== gameEpoch) return;
     statusMessage.textContent = "Error communicating with AI engine.";
   } finally {
+    if (epoch !== gameEpoch) return;
     isThinking = false;
     if (!isGameOver) {
       updateStatusDisplay();
@@ -202,6 +227,14 @@ newGameBtn.addEventListener("click", () => {
   initBoard();
 });
 
+playAgainBtn.addEventListener("click", initBoard);
+resultOverlay.addEventListener("click", event => {
+  if (event.target === resultOverlay) initBoard();
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && !resultOverlay.hidden) initBoard();
+});
+
 playerSideButtons.forEach(btn => {
   btn.addEventListener("click", () => {
     playerSideButtons.forEach(b => b.classList.remove("active"));
@@ -212,3 +245,4 @@ playerSideButtons.forEach(btn => {
 });
 
 initBoard();
+setInterval(loadStats, 2500);

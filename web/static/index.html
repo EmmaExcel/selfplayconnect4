@@ -38,12 +38,11 @@
       <section class="panel-section">
         <h2>Game Configuration</h2>
         <div class="form-group">
-          <label for="difficultySelect">Search Simulations</label>
+          <label for="difficultySelect">AI Difficulty</label>
           <select id="difficultySelect" class="form-control">
-            <option value="25">Instant (25 simulations)</option>
-            <option value="60">Fast (60 simulations)</option>
-            <option value="150" selected>Balanced (150 simulations)</option>
-            <option value="400">Deep Search (400 simulations)</option>
+            <option value="400" selected>Hard</option>
+            <option value="800">Very Hard</option>
+            <option value="1600">Extremely Hard</option>
           </select>
         </div>
 
@@ -62,14 +61,15 @@
         <h2>Agent Evaluation</h2>
         <div class="model-meta-row">
           <div class="meta-item">
-            <span class="meta-label">Model Generation</span>
-            <span class="meta-val" id="modelGenDisplay">1</span>
+            <span class="meta-label">Online Model Updates</span>
+            <span class="meta-val" id="modelGenDisplay">0</span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">Online Games Learned</span>
+            <span class="meta-label">Completed Games Saved</span>
             <span class="meta-val" id="gamesLearnedDisplay">0</span>
           </div>
         </div>
+        <p class="training-state" id="trainingState" aria-live="polite">Training status loading…</p>
 
         <div class="metric-block">
           <div class="metric-header">
@@ -88,7 +88,7 @@
 
         <div class="metric-block">
           <div class="metric-header">
-            <span>MCTS Policy Prior by Column</span>
+            <span>AI Move Preference by Column</span>
           </div>
           <div class="policy-bars" id="policyBarsContainer">
             <div class="policy-bar-row">
@@ -144,6 +144,15 @@
       </div>
     </aside>
   </main>
+
+  <div class="result-overlay" id="resultOverlay" hidden>
+    <div class="result-dialog" role="dialog" aria-modal="true" aria-labelledby="resultTitle" aria-describedby="resultDescription">
+      <div class="result-icon" id="resultIcon" aria-hidden="true">★</div>
+      <h2 id="resultTitle">Game over</h2>
+      <p id="resultDescription"></p>
+      <button type="button" id="playAgainBtn" class="btn btn-primary">Play Again</button>
+    </div>
+  </div>
 
   <script type="module" src="/static/app.js"></script>
 </body>

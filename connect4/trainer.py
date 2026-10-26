@@ -28,11 +28,18 @@ class Trainer:
             num_channels=net_cfg['num_channels'],
         ).to(self.device)
 
+        checkpoint_path = "checkpoints/best_model.pt"
+        if os.path.exists(checkpoint_path):
+            checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+            self.network.load_state_dict(checkpoint.get("model_state_dict", checkpoint))
+        self.network.eval()
+
         self.best_network = Connect4Network(
             num_residual_blocks=net_cfg['num_residual_blocks'],
             num_channels=net_cfg['num_channels'],
         ).to(self.device)
         self.best_network.load_state_dict(self.network.state_dict())
+        self.best_network.eval()
 
         train_cfg = self.config['training']
         self.optimizer = optim.Adam(
@@ -100,6 +107,7 @@ class Trainer:
 
     def _train_network(self, train_cfg: dict) -> tuple:
         self.network.train()
+        self.network.clear_cache()
         total_loss_sum = 0.0
         policy_loss_sum = 0.0
         value_loss_sum = 0.0
@@ -133,9 +141,12 @@ class Trainer:
         avg_total = total_loss_sum / max(num_batches, 1)
         avg_policy = policy_loss_sum / max(num_batches, 1)
         avg_value = value_loss_sum / max(num_batches, 1)
+        self.network.clear_cache()
         return avg_total, avg_policy, avg_value
 
     def _evaluate(self) -> bool:
+        self.network.eval()
+        self.best_network.eval()
         eval_mcts_cfg = {
             **self.config['mcts'],
             'num_simulations': min(self.config['mcts'].get('num_simulations', 800), 200)
@@ -163,16 +174,18 @@ class Trainer:
         threshold = self.config['training']['acceptance_threshold']
         if win_rate >= threshold:
             self.best_network.load_state_dict(self.network.state_dict())
+            self.best_network.clear_cache()
             return True
 
         self.network.load_state_dict(self.best_network.state_dict())
+        self.network.clear_cache()
         return False
 
     def _save_checkpoint(self, iteration: int):
         path = os.path.join("checkpoints", "best_model.pt")
+        temp_path = path + ".tmp"
         torch.save({
             'iteration': iteration,
             'model_state_dict': self.best_network.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'scheduler_state_dict': self.scheduler.state_dict(),
-        }, path)
+        }, temp_path)
+        os.replace(temp_path, path)
