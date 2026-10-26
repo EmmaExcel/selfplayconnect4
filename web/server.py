@@ -14,7 +14,14 @@ from web.online_learner import OnlineLearner
 app = FastAPI(title="Self-Play Connect 4", docs_url=None, redoc_url=None)
 
 static_dir = os.path.join(os.path.dirname(__file__), "static")
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
+class FreshStaticFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        return response
+
+
+app.mount("/static", FreshStaticFiles(directory=static_dir), name="static")
 
 data_dir = os.environ.get("CONNECT4_DATA_DIR")
 if data_dir:
@@ -45,7 +52,8 @@ class GameOverRequest(BaseModel):
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def get_index():
-    return FileResponse(os.path.join(static_dir, "index.html"))
+    return FileResponse(os.path.join(static_dir, "index.html"),
+                        headers={"Cache-Control": "no-store, max-age=0"})
 
 
 @app.api_route("/privacy", methods=["GET", "HEAD"])

@@ -1,6 +1,6 @@
-import { ROWS, COLS, getDropRow, checkWin, checkDraw } from "./js/rules.js";
-import { fetchMove, fetchStats, reportGameOver } from "./js/api.js";
-import { updateEvaluation, updatePolicyBars, updateModelStats, renderMoveHistory } from "./js/telemetry.js";
+import { ROWS, COLS, getDropRow, checkWin, checkDraw } from "./js/rules.js?v=20261026-2";
+import { fetchMove, fetchStats, reportGameOver } from "./js/api.js?v=20261026-2";
+import { updateEvaluation, updatePolicyBars, updateModelStats, renderMoveHistory } from "./js/telemetry.js?v=20261026-2";
 
 let board = [];
 let humanSide = 1;
