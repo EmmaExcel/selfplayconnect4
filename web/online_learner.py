@@ -1,4 +1,6 @@
 import os
+import json
+import sqlite3
 import threading
 import torch
 import torch.optim as optim
@@ -11,18 +13,34 @@ from connect4.network import Connect4Network
 class OnlineLearner:
     """Persist finished games, then train one background worker on their positions."""
 
-    def __init__(self, model_path: str = "checkpoints/best_model.pt", data_path: str = "data/online_buffer.pt"):
+    def __init__(self, model_path: str = "checkpoints/best_model.pt", data_path: str = "data/online.sqlite3"):
         self.model_path = model_path
-        self.data_path = data_path
+        self.data_path = data_path if data_path.endswith(".sqlite3") else os.path.splitext(data_path)[0] + ".sqlite3"
+        self.legacy_path = (data_path if data_path.endswith(".pt") else
+                            os.path.join(os.path.dirname(self.data_path), "online_buffer.pt"))
         self.game = Connect4Game()
         self.lock = threading.Lock()
         self.games_learned = 0
         self.model_generation = 0
-        self.completed_sessions = []
+        self.completed_sessions = set()
         self.training = False
         self.pending_games = 0
         self.training_error = None
         os.makedirs(os.path.dirname(self.data_path) or ".", exist_ok=True)
+        self.db = sqlite3.connect(self.data_path, check_same_thread=False, timeout=30)
+        self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute("PRAGMA synchronous=FULL")
+        self.db.executescript("""
+            CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS games (
+                session_id TEXT PRIMARY KEY, winner INTEGER NOT NULL,
+                moves TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS samples (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                state BLOB NOT NULL, policy BLOB NOT NULL, value REAL NOT NULL
+            );
+        """)
         self.buffer = self._load_buffer()
         if os.path.exists(self.model_path):
             checkpoint = torch.load(self.model_path, map_location="cpu", weights_only=False)
@@ -33,14 +51,35 @@ class OnlineLearner:
             threading.Thread(target=self._learning_worker, args=(None,), daemon=True).start()
 
     def _load_buffer(self) -> list:
-        if not os.path.exists(self.data_path):
-            return []
-        data = torch.load(self.data_path, map_location="cpu", weights_only=False)
-        self.games_learned = int(data.get("games_learned", 0))
-        self.model_generation = int(data.get("model_generation", 0))
-        self.completed_sessions = list(data.get("completed_sessions", []))[-2000:]
-        self.pending_games = int(data.get("pending_games", 0))
-        return data.get("samples", [])
+        # Import the previous torch buffer once; leave the file as a backup.
+        if not self.db.execute("SELECT 1 FROM metadata LIMIT 1").fetchone() and os.path.exists(self.legacy_path):
+            data = torch.load(self.legacy_path, map_location="cpu", weights_only=False)
+            with self.db:
+                self.db.executemany("INSERT INTO samples(state, policy, value) VALUES (?, ?, ?)",
+                                    (self._encode_sample(sample) for sample in data.get("samples", [])))
+                self.db.executemany("INSERT OR IGNORE INTO games(session_id, winner, moves) VALUES (?, 0, '[]')",
+                                    ((session_id,) for session_id in data.get("completed_sessions", [])))
+                for key in ("games_learned", "model_generation", "pending_games"):
+                    self.db.execute("INSERT INTO metadata(key, value) VALUES (?, ?)", (key, int(data.get(key, 0))))
+        values = dict(self.db.execute("SELECT key, value FROM metadata"))
+        self.games_learned = values.get("games_learned", 0)
+        self.model_generation = values.get("model_generation", 0)
+        self.pending_games = values.get("pending_games", 0)
+        self.completed_sessions = {row[0] for row in self.db.execute("SELECT session_id FROM games")}
+        return [self._decode_sample(row) for row in self.db.execute(
+            "SELECT state, policy, value FROM samples ORDER BY id DESC LIMIT 50000"
+        ).fetchall()[::-1]]
+
+    @staticmethod
+    def _encode_sample(sample):
+        state, policy, value = sample
+        return (sqlite3.Binary(np.asarray(state, dtype=np.float32).tobytes()),
+                sqlite3.Binary(np.asarray(policy, dtype=np.float32).tobytes()), float(value))
+
+    @staticmethod
+    def _decode_sample(row):
+        return (np.frombuffer(row[0], dtype=np.float32).reshape(3, 6, 7).copy(),
+                np.frombuffer(row[1], dtype=np.float32).copy(), float(row[2]))
 
     @staticmethod
     def _atomic_save(payload, path):
@@ -54,13 +93,13 @@ class OnlineLearner:
                 os.remove(temp_path)
 
     def _save_buffer(self):
-        self._atomic_save({
-            "games_learned": self.games_learned,
-            "model_generation": self.model_generation,
-            "pending_games": self.pending_games,
-            "completed_sessions": self.completed_sessions[-2000:],
-            "samples": self.buffer[-50000:]
-        }, self.data_path)
+        with self.db:
+            self.db.executemany("INSERT INTO metadata(key, value) VALUES (?, ?) "
+                                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (
+                ("games_learned", self.games_learned),
+                ("model_generation", self.model_generation),
+                ("pending_games", self.pending_games),
+            ))
 
     def _replay(self, moves: list[int], winner: int) -> list:
         if not moves or len(moves) > 42:
@@ -92,20 +131,20 @@ class OnlineLearner:
         with self.lock:
             if session_id in self.completed_sessions:
                 return self._stats_unlocked()
-            old_len = len(self.buffer)
-            self.buffer.extend(samples)
+            with self.db:
+                self.db.execute("INSERT INTO games(session_id, winner, moves) VALUES (?, ?, ?)",
+                                (session_id, winner, json.dumps(moves)))
+                self.db.executemany("INSERT INTO samples(state, policy, value) VALUES (?, ?, ?)",
+                                    (self._encode_sample(sample) for sample in samples))
+                self.db.execute("DELETE FROM samples WHERE id <= (SELECT COALESCE(MAX(id), 0) - 50000 FROM samples)")
+                self.db.execute("INSERT INTO metadata(key, value) VALUES ('games_learned', ?) "
+                                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (self.games_learned + 1,))
+                self.db.execute("INSERT INTO metadata(key, value) VALUES ('pending_games', ?) "
+                                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (self.pending_games + 1,))
+            self.buffer = (self.buffer + samples)[-50000:]
             self.games_learned += 1
             self.pending_games += 1
-            self.completed_sessions.append(session_id)
-            self.completed_sessions = self.completed_sessions[-2000:]
-            try:
-                self._save_buffer()
-            except Exception:
-                del self.buffer[old_len:]
-                self.games_learned -= 1
-                self.pending_games -= 1
-                self.completed_sessions.pop()
-                raise
+            self.completed_sessions.add(session_id)
             if not self.training:
                 self.training = True
                 threading.Thread(target=self._learning_worker, args=(inference_engine,), daemon=True).start()
@@ -178,3 +217,7 @@ class OnlineLearner:
     def get_stats(self) -> dict:
         with self.lock:
             return self._stats_unlocked()
+
+    def close(self):
+        with self.lock:
+            self.db.close()

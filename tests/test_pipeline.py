@@ -2,6 +2,7 @@ import unittest
 import shutil
 import tempfile
 import time
+import sqlite3
 import numpy as np
 from connect4.game import Connect4Game
 from connect4.network import Connect4Network
@@ -90,6 +91,12 @@ class TestPipeline(unittest.TestCase):
         stats = learner.complete_game("sess_test", winner=1, moves=moves)
         self.assertEqual(stats["games_learned"], 1)
         self.assertGreater(len(learner.buffer), 0)
+        db = sqlite3.connect(learner.data_path)
+        try:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM games").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM samples").fetchone()[0], 14)
+        finally:
+            db.close()
         self.assertEqual(learner.complete_game("sess_test", winner=1, moves=moves)["games_learned"], 1)
         reloaded = OnlineLearner(model_path=model_file, data_path=data_file)
         self.assertEqual(reloaded.get_stats()["games_learned"], 1)
@@ -97,6 +104,8 @@ class TestPipeline(unittest.TestCase):
         with self.assertRaises(ValueError):
             reloaded.complete_game("bad", winner=2, moves=moves)
         self.assertEqual(reloaded.get_stats()["games_learned"], 1)
+        reloaded.close()
+        learner.close()
 
     def test_online_training_saves_generation(self):
         from web.online_learner import OnlineLearner
@@ -112,7 +121,29 @@ class TestPipeline(unittest.TestCase):
         self.assertIsNone(stats["training_error"])
         self.assertEqual(stats["model_generation"], 1)
         self.assertTrue(os.path.exists(model_file))
-        self.assertEqual(OnlineLearner(model_file, data_file).get_stats()["model_generation"], 1)
+        reloaded = OnlineLearner(model_file, data_file)
+        self.assertEqual(reloaded.get_stats()["model_generation"], 1)
+        reloaded.close()
+        learner.close()
+
+    def test_legacy_online_buffer_migrates_once(self):
+        from web.online_learner import OnlineLearner
+        import os
+        import torch
+        legacy_file = os.path.join(self.temp_dir, "online_buffer.pt")
+        state = self.game.get_initial_state()
+        policy = np.eye(7, dtype=np.float32)[3]
+        torch.save({"games_learned": 4, "model_generation": 2,
+                    "samples": [(state, policy, 1.0)]}, legacy_file)
+        learner = OnlineLearner(os.path.join(self.temp_dir, "missing.pt"),
+                                os.path.join(self.temp_dir, "online.sqlite3"))
+        self.assertEqual(learner.get_stats()["games_learned"], 4)
+        self.assertEqual(len(learner.buffer), 1)
+        reloaded = OnlineLearner(os.path.join(self.temp_dir, "missing.pt"),
+                                 os.path.join(self.temp_dir, "online.sqlite3"))
+        self.assertEqual(len(reloaded.buffer), 1)
+        reloaded.close()
+        learner.close()
 
 
 if __name__ == "__main__":

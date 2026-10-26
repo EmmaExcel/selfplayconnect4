@@ -168,7 +168,7 @@ Open `http://localhost:8000` in any browser:
 
 The web application offers Hard, Very Hard, and Extremely Hard tactical search, and shows live position value evaluations, AI move preferences by column, move history, and online training statistics.
 
-For a hosted instance, set `CONNECT4_DATA_DIR` to a directory backed by a persistent volume (for example `/app/persist`). The server seeds its first model from the bundled checkpoint, then stores online training samples, game counts, and updated weights in that directory. Without a persistent volume, those online updates are lost when the container is replaced. The displayed **Completed Games Saved** count includes validated finished games; **Online Model Updates** increases only after a trained checkpoint is saved. Training state refreshes while the page is open.
+For a hosted instance, set `CONNECT4_DATA_DIR` to a directory backed by a persistent volume (for example `/app/persist`). The server seeds its first model from the bundled checkpoint, then stores game records, replay samples, and counters in SQLite (`online.sqlite3`) and updated weights in `best_model.pt`. An existing `online_buffer.pt` is imported once when the SQLite database is first created. Without a persistent volume, online updates are lost when the container is replaced. The displayed **Completed Games Saved** count includes validated finished games; **Online Model Updates** increases only after a trained checkpoint is saved. Training state refreshes while the page is open.
 
 For Docker Compose, `docker compose up --build` uses the included named volume so training survives container replacements.
 

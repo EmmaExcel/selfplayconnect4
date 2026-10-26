@@ -22,10 +22,10 @@ if data_dir:
     model_path = os.path.join(data_dir, "best_model.pt")
     if not os.path.exists(model_path):
         shutil.copy2("checkpoints/best_model.pt", model_path)
-    buffer_path = os.path.join(data_dir, "online_buffer.pt")
+    buffer_path = os.path.join(data_dir, "online.sqlite3")
 else:
     model_path = "checkpoints/best_model.pt"
-    buffer_path = "data/online_buffer.pt"
+    buffer_path = "data/online.sqlite3"
 
 inference_engine = ModelInference(checkpoint_path=model_path)
 online_learner = OnlineLearner(model_path=model_path, data_path=buffer_path)
